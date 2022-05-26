@@ -1,32 +1,70 @@
-/**
- * Some predefined delay values (in milliseconds).
- */
-export enum Delays {
-  Short = 500,
-  Medium = 2000,
-  Long = 5000,
+import 'dotenv/config';
+import { execa, execaCommand } from 'execa';
+import archiver from 'archiver';
+import archiverZipEncrypted from 'archiver-zip-encrypted';
+import fs from 'fs';
+import { S3, PutObjectCommand } from '@aws-sdk/client-s3';
+
+async function dumpDb(): Promise<string | void> {
+  const resultFileName = `dump-${process.env.DB_NAME}-${Date.now()}.sql`;
+
+  const mysqldump = `${process.env.DB_CLIENT_PROGRAMS_DIR}/mysqldump`;
+  const userOptions = `--user=${process.env.DB_USERNAME}`;
+  const passwordOptions = `--password=${process.env.DB_PASSWORD}`;
+  const databaseNameOptions = `${process.env.DB_NAME}`;
+  const resultFileOptions = `--result-file=${resultFileName}`;
+
+  await execa(mysqldump, [userOptions, passwordOptions, databaseNameOptions, resultFileOptions]);
+
+  return resultFileName;
 }
 
-/**
- * Returns a Promise<string> that resolves after a given time.
- *
- * @param {string} name - A name.
- * @param {number=} [delay=Delays.Medium] - A number of milliseconds to delay resolution of the Promise.
- * @returns {Promise<string>}
- */
-function delayedHello(
-  name: string,
-  delay: number = Delays.Medium,
-): Promise<string> {
-  return new Promise((resolve: (value?: string) => void) =>
-    setTimeout(() => resolve(`Hello, ${name}`), delay),
+function archiveDb(dumpedDb: string) {
+  const output = fs.createWriteStream(process.cwd() + `/${dumpedDb}.zip`);
+  archiver.registerFormat('zip-encrypted', archiverZipEncrypted);
+  const archive = archiver.create('zip-encrypted',
+    { zlib: { level: 9 }, encryptionMethod: 'aes256', password: process.env.ENCRYPTION_PASSPHRASE }
   );
+  archive.pipe(output);
+  archive.file(dumpedDb, { name: dumpedDb });
+  return archive.finalize();
 }
 
-// Below are examples of using ESLint errors suppression
-// Here it is suppressing a missing return type definition for the greeter function.
-
-// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-export async function greeter(name: string) {
-  return await delayedHello(name, Delays.Long);
+async function cleanUp(dumpedDb: string) {
+  await execaCommand(`rm ${dumpedDb} ${dumpedDb}.zip`);
 }
+
+function uploadToStorage(dumpedDb: string) {
+  const client = new S3({
+    region: process.env.AWS_S3_REGION_NAME,
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    }
+  });
+
+  const file = `${dumpedDb}.zip`;
+  const fileStream = fs.createReadStream(file);
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key: file,
+    Body: fileStream,
+    StorageClass: process.env.AWS_S3_STORAGE_CLASS
+  });
+
+  return client.send(command);
+}
+
+(async () => {
+  try {
+    const dumpedDb = await dumpDb();
+
+    if (dumpedDb) {
+      await archiveDb(dumpedDb);
+      await uploadToStorage(dumpedDb);
+      await cleanUp(dumpedDb);
+    }
+  } catch (err) {
+    console.log(err)
+  }
+})();
