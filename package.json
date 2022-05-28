@@ -38,8 +38,9 @@
     "@aws-sdk/client-s3": "^3.95.0",
     "archiver": "^5.3.1",
     "archiver-zip-encrypted": "^1.0.11",
-    "dotenv": "^16.0.1",
     "execa": "^6.1.0",
+    "js-yaml": "^4.1.0",
+    "node-cron": "^3.0.0",
     "tslib": "~2.3.1"
   },
   "volta": {

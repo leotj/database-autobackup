@@ -4,14 +4,33 @@ import archiver from 'archiver';
 import archiverZipEncrypted from 'archiver-zip-encrypted';
 import fs from 'fs';
 import { S3, PutObjectCommand } from '@aws-sdk/client-s3';
+import cron from 'node-cron';
+import yaml from 'js-yaml';
+
+interface Config {
+  dbClientProgramsDirectory: string;
+  dbName: string;
+  dbUserName: string;
+  dbPassword: string;
+  encryptionPassphrase: string;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsS3RegionName: string;
+  awsS3BucketName: string;
+  awsS3StorageClass: string;
+  cronExpression: string;
+  cronOptionsTimeZone: string;
+}
+
+const config: Config = yaml.load(fs.readFileSync('config.yaml', 'utf8'));
 
 async function dumpDb(): Promise<string | void> {
-  const resultFileName = `dump-${process.env.DB_NAME}-${Date.now()}.sql`;
+  const resultFileName = `dump-${config.dbName}-${Date.now()}.sql`;
 
-  const mysqldump = `${process.env.DB_CLIENT_PROGRAMS_DIR}/mysqldump`;
-  const userOptions = `--user=${process.env.DB_USERNAME}`;
-  const passwordOptions = `--password=${process.env.DB_PASSWORD}`;
-  const databaseNameOptions = `${process.env.DB_NAME}`;
+  const mysqldump = `${config.dbClientProgramsDirectory}/mysqldump`;
+  const userOptions = `--user=${config.dbUserName}`;
+  const passwordOptions = `--password=${config.dbPassword}`;
+  const databaseNameOptions = `${config.dbName}`;
   const resultFileOptions = `--result-file=${resultFileName}`;
 
   await execa(mysqldump, [userOptions, passwordOptions, databaseNameOptions, resultFileOptions]);
@@ -23,7 +42,7 @@ function archiveDb(dumpedDb: string) {
   const output = fs.createWriteStream(process.cwd() + `/${dumpedDb}.zip`);
   archiver.registerFormat('zip-encrypted', archiverZipEncrypted);
   const archive = archiver.create('zip-encrypted',
-    { zlib: { level: 9 }, encryptionMethod: 'aes256', password: process.env.ENCRYPTION_PASSPHRASE }
+    { zlib: { level: 9 }, encryptionMethod: 'aes256', password: config.encryptionPassphrase }
   );
   archive.pipe(output);
   archive.file(dumpedDb, { name: dumpedDb });
@@ -36,26 +55,26 @@ async function cleanUp(dumpedDb: string) {
 
 function uploadToStorage(dumpedDb: string) {
   const client = new S3({
-    region: process.env.AWS_S3_REGION_NAME,
+    region: config.awsS3RegionName,
     credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      accessKeyId: config.awsAccessKeyId,
+      secretAccessKey: config.awsSecretAccessKey
     }
   });
 
   const file = `${dumpedDb}.zip`;
   const fileStream = fs.createReadStream(file);
   const command = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Bucket: config.awsS3BucketName,
     Key: file,
     Body: fileStream,
-    StorageClass: process.env.AWS_S3_STORAGE_CLASS
+    StorageClass: config.awsS3StorageClass
   });
 
   return client.send(command);
 }
 
-(async () => {
+async function backupDb() {
   try {
     const dumpedDb = await dumpDb();
 
@@ -67,4 +86,15 @@ function uploadToStorage(dumpedDb: string) {
   } catch (err) {
     console.log(err)
   }
+}
+
+(async () => {
+  const scheduleOptions = {
+    scheduled: true,
+    timezone: config.cronOptionsTimeZone
+  };
+
+  const task = cron.schedule(config.cronExpression, backupDb, scheduleOptions);
+
+  task.start();
 })();
