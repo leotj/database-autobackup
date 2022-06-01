@@ -1,4 +1,4 @@
-import 'dotenv/config';
+#!/usr/bin/env node
 import { execa, execaCommand } from 'execa';
 import archiver from 'archiver';
 import archiverZipEncrypted from 'archiver-zip-encrypted';
@@ -6,6 +6,16 @@ import fs from 'fs';
 import { S3, PutObjectCommand } from '@aws-sdk/client-s3';
 import cron from 'node-cron';
 import yaml from 'js-yaml';
+import arg from 'arg';
+import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+
+const __dirname = path.dirname(__filename);
+
+const configOSDirectory = path.resolve(os.homedir(), './.database-autobackup');
 
 interface Config {
   dbClientProgramsDirectory: string;
@@ -22,9 +32,11 @@ interface Config {
   cronOptionsTimeZone: string;
 }
 
-const config: Config = yaml.load(fs.readFileSync('config.yaml', 'utf8'));
+function getConfig(): Config {
+  return yaml.load(fs.readFileSync(`${configOSDirectory}/config.yaml`, 'utf8'));
+}
 
-async function dumpDb(): Promise<string | void> {
+async function dumpDb(config: Config): Promise<string | void> {
   const resultFileName = `dump-${config.dbName}-${Date.now()}.sql`;
 
   const mysqldump = `${config.dbClientProgramsDirectory}/mysqldump`;
@@ -38,7 +50,7 @@ async function dumpDb(): Promise<string | void> {
   return resultFileName;
 }
 
-function archiveDb(dumpedDb: string) {
+function archiveDb(config: Config, dumpedDb: string) {
   const output = fs.createWriteStream(process.cwd() + `/${dumpedDb}.zip`);
   archiver.registerFormat('zip-encrypted', archiverZipEncrypted);
   const archive = archiver.create('zip-encrypted',
@@ -53,7 +65,7 @@ async function cleanUp(dumpedDb: string) {
   await execaCommand(`rm ${dumpedDb} ${dumpedDb}.zip`);
 }
 
-function uploadToStorage(dumpedDb: string) {
+function uploadToStorage(config: Config, dumpedDb: string) {
   const client = new S3({
     region: config.awsS3RegionName,
     credentials: {
@@ -74,13 +86,13 @@ function uploadToStorage(dumpedDb: string) {
   return client.send(command);
 }
 
-async function backupDb() {
+async function backupDb(config: Config) {
   try {
-    const dumpedDb = await dumpDb();
+    const dumpedDb = await dumpDb(config);
 
     if (dumpedDb) {
-      await archiveDb(dumpedDb);
-      await uploadToStorage(dumpedDb);
+      await archiveDb(config, dumpedDb);
+      await uploadToStorage(config, dumpedDb);
       await cleanUp(dumpedDb);
     }
   } catch (err) {
@@ -88,13 +100,57 @@ async function backupDb() {
   }
 }
 
-(async () => {
+interface Options {
+  init: boolean;
+  start: boolean;
+  stop: boolean;
+}
+
+function parseArgumentsIntoOptions(rawArgs): Options {
+  const args = arg({
+    '--init': Boolean,
+    '--start': Boolean,
+    '--stop': Boolean
+  }, {
+    argv: rawArgs.slice(2)
+  });
+
+  return {
+    init: args['--init'] || false,
+    start: args['--start'] || false,
+    stop: args['--stop'] || false
+  }
+}
+
+async function initConfigurationFile() {
+  const configExampleSource = path.resolve(__dirname, '../../example.config.yaml');
+  await execaCommand(`mkdir ${configOSDirectory}`);
+  await execaCommand(`cp ${configExampleSource} ${configOSDirectory}/config.yaml`);
+}
+
+async function runAutomatedBackup() {
+  const config = getConfig();
+
   const scheduleOptions = {
     scheduled: true,
     timezone: config.cronOptionsTimeZone
   };
 
-  const task = cron.schedule(config.cronExpression, backupDb, scheduleOptions);
+  const scheduledFunction = async () => {
+    await backupDb(config);
+  };
+
+  const task = cron.schedule(config.cronExpression, scheduledFunction, scheduleOptions);
 
   task.start();
+}
+
+(async () => {
+  const options = parseArgumentsIntoOptions(process.argv);
+
+  switch (true) {
+    case options.init: await initConfigurationFile(); break;
+    case options.start: await runAutomatedBackup(); break;
+    default: break;
+  }
 })();

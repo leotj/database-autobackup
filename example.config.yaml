@@ -1,0 +1,12 @@
+dbClientProgramsDirectory: "/Applications/XAMPP/xamppfiles/bin"
+dbName: sample
+dbUserName:
+dbPassword:
+encryptionPassphrase:
+awsAccessKeyId:
+awsSecretAccessKey:
+awsS3RegionName: ap-southeast-1
+awsS3BucketName: database-autobackup
+awsS3StorageClass: GLACIER_IR
+cronExpression: "31 22 * * *"
+cronOptionsTimeZone: Asia/Jakarta
