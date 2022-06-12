@@ -1,13 +1,43 @@
 {
   "name": "database-autobackup",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Backup Database Automatically",
+  "author": "Leo Tiofan Justicia <general@leotj.com>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/leotj/database-autobackup/blob/main/README.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leotj/database-autobackup.git"
+  },
   "bin": {
     "database-autobackup": "build/src/main.js"
   },
   "type": "module",
   "engines": {
     "node": ">= 16.13 <17"
+  },
+  "scripts": {
+    "start": "node build/src/main.js",
+    "clean": "rimraf coverage build tmp",
+    "prebuild": "npm run lint",
+    "build": "tsc -p tsconfig.json",
+    "build:watch": "tsc -w -p tsconfig.json",
+    "build:release": "npm run clean && tsc -p tsconfig.release.json",
+    "postbuild:release": "chmod u+x build/src/main.js",
+    "lint": "eslint . --ext .ts",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.95.0",
+    "archiver": "^5.3.1",
+    "archiver-zip-encrypted": "^1.0.11",
+    "arg": "^5.0.1",
+    "execa": "^6.1.0",
+    "js-yaml": "^4.1.0",
+    "node-cron": "^3.0.0",
+    "pm2": "^5.2.0",
+    "tslib": "~2.3.1"
   },
   "devDependencies": {
     "@types/jest": "~27.4",
@@ -23,31 +53,6 @@
     "ts-jest": "~27.1",
     "tsutils": "~3.21",
     "typescript": "~4.6"
-  },
-  "scripts": {
-    "start": "node build/src/main.js",
-    "clean": "rimraf coverage build tmp",
-    "prebuild": "npm run lint",
-    "build": "tsc -p tsconfig.json",
-    "build:watch": "tsc -w -p tsconfig.json",
-    "build:release": "npm run clean && tsc -p tsconfig.release.json",
-    "postbuild:release": "chmod u+x build/src/main.js",
-    "lint": "eslint . --ext .ts",
-    "test": "jest --coverage",
-    "test:watch": "jest --watch"
-  },
-  "author": "Leo Tiofan Justicia <general@leotj.com>",
-  "license": "Apache-2.0",
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.95.0",
-    "archiver": "^5.3.1",
-    "archiver-zip-encrypted": "^1.0.11",
-    "arg": "^5.0.1",
-    "execa": "^6.1.0",
-    "js-yaml": "^4.1.0",
-    "node-cron": "^3.0.0",
-    "pm2": "^5.2.0",
-    "tslib": "~2.3.1"
   },
   "volta": {
     "node": "16.13.0"

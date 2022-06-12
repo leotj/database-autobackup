@@ -23,15 +23,15 @@ Supported Object Storage:
 
 ## License
 
-Licensed under the APLv2. See the [LICENSE](https://github.com/jsynowiec/node-typescript-boilerplate/blob/main/LICENSE) file for details.
+Licensed under the APLv2. See the [LICENSE](https://github.com/leotj/database-autobackup/blob/main/LICENSE) file for details.
 
 [ts-badge]: https://img.shields.io/badge/TypeScript-4.6-blue.svg
 [nodejs-badge]: https://img.shields.io/badge/Node.js->=%2016.13-blue.svg
 [nodejs]: https://nodejs.org/dist/latest-v14.x/docs/api/
-[gha-badge]: https://github.com/jsynowiec/node-typescript-boilerplate/actions/workflows/nodejs.yml/badge.svg
-[gha-ci]: https://github.com/jsynowiec/node-typescript-boilerplate/actions/workflows/nodejs.yml
+[gha-badge]: https://github.com/leotj/database-autobackup/actions/workflows/nodejs.yml/badge.svg
+[gha-ci]: https://github.com/leotj/database-autobackup/blob/main/.github/workflows/nodejs.yml
 [typescript]: https://www.typescriptlang.org/
 [typescript-4-6]: https://devblogs.microsoft.com/typescript/announcing-typescript-4-6/
 [license-badge]: https://img.shields.io/badge/license-APLv2-blue.svg
-[license]: https://github.com/jsynowiec/node-typescript-boilerplate/blob/main/LICENSE
+[license]: https://github.com/leotj/database-autobackup/blob/main/LICENSE
 [pm2]: https://www.npmjs.com/package/pm2
