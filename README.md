@@ -18,8 +18,8 @@ Current Supported Object Storage
 ## Available Commands
 
 - `--init` - create configuration file on user home directory
-- `--start` - lint source files and tests before building
-- `--stop` - transpile TypeScript to ES6
+- `--start` - start a daemon process for automated backup scheduler 
+- `--stop` - stop the daemon process for automated backup scheduler
 
 ## License
 
