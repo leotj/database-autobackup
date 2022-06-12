@@ -7,6 +7,8 @@
 
 Backup your database automatically and upload the encrypted backup to an Object Storage like AWS S3.
 
+This CLI uses [pm2] to schedule backups via the daemon process. You can use the pm2 command to control the daemon process.
+
 Current Support Database
 - MySQL
 
@@ -32,3 +34,4 @@ Licensed under the APLv2. See the [LICENSE](https://github.com/jsynowiec/node-ty
 [typescript-4-6]: https://devblogs.microsoft.com/typescript/announcing-typescript-4-6/
 [license-badge]: https://img.shields.io/badge/license-APLv2-blue.svg
 [license]: https://github.com/jsynowiec/node-typescript-boilerplate/blob/main/LICENSE
+[pm2]: https://www.npmjs.com/package/pm2

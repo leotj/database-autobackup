@@ -1,104 +1,12 @@
 #!/usr/bin/env node
-import { execa, execaCommand } from 'execa';
-import archiver from 'archiver';
-import archiverZipEncrypted from 'archiver-zip-encrypted';
-import fs from 'fs';
-import { S3, PutObjectCommand } from '@aws-sdk/client-s3';
-import cron from 'node-cron';
-import yaml from 'js-yaml';
 import arg from 'arg';
-import os from 'os';
+import pm2 from 'pm2';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
+import { __dirname } from './constants.js';
+import initializeConfigurationFile from './commands/initialize-configuration-file.command.js';
 
-const __dirname = path.dirname(__filename);
-
-const configOSDirectory = path.resolve(os.homedir(), './.database-autobackup');
-
-interface Config {
-  dbClientProgramsDirectory: string;
-  dbName: string;
-  dbUserName: string;
-  dbPassword: string;
-  encryptionPassphrase: string;
-  awsAccessKeyId: string;
-  awsSecretAccessKey: string;
-  awsS3RegionName: string;
-  awsS3BucketName: string;
-  awsS3StorageClass: string;
-  cronExpression: string;
-  cronOptionsTimeZone: string;
-}
-
-function getConfig(): Config {
-  return yaml.load(fs.readFileSync(`${configOSDirectory}/config.yaml`, 'utf8'));
-}
-
-async function dumpDb(config: Config): Promise<string | void> {
-  const resultFileName = `dump-${config.dbName}-${Date.now()}.sql`;
-
-  const mysqldump = `${config.dbClientProgramsDirectory}/mysqldump`;
-  const userOptions = `--user=${config.dbUserName}`;
-  const passwordOptions = `--password=${config.dbPassword}`;
-  const databaseNameOptions = `${config.dbName}`;
-  const resultFileOptions = `--result-file=${resultFileName}`;
-
-  await execa(mysqldump, [userOptions, passwordOptions, databaseNameOptions, resultFileOptions]);
-
-  return resultFileName;
-}
-
-function archiveDb(config: Config, dumpedDb: string) {
-  const output = fs.createWriteStream(process.cwd() + `/${dumpedDb}.zip`);
-  archiver.registerFormat('zip-encrypted', archiverZipEncrypted);
-  const archive = archiver.create('zip-encrypted',
-    { zlib: { level: 9 }, encryptionMethod: 'aes256', password: config.encryptionPassphrase }
-  );
-  archive.pipe(output);
-  archive.file(dumpedDb, { name: dumpedDb });
-  return archive.finalize();
-}
-
-async function cleanUp(dumpedDb: string) {
-  await execaCommand(`rm ${dumpedDb} ${dumpedDb}.zip`);
-}
-
-function uploadToStorage(config: Config, dumpedDb: string) {
-  const client = new S3({
-    region: config.awsS3RegionName,
-    credentials: {
-      accessKeyId: config.awsAccessKeyId,
-      secretAccessKey: config.awsSecretAccessKey
-    }
-  });
-
-  const file = `${dumpedDb}.zip`;
-  const fileStream = fs.createReadStream(file);
-  const command = new PutObjectCommand({
-    Bucket: config.awsS3BucketName,
-    Key: file,
-    Body: fileStream,
-    StorageClass: config.awsS3StorageClass
-  });
-
-  return client.send(command);
-}
-
-async function backupDb(config: Config) {
-  try {
-    const dumpedDb = await dumpDb(config);
-
-    if (dumpedDb) {
-      await archiveDb(config, dumpedDb);
-      await uploadToStorage(config, dumpedDb);
-      await cleanUp(dumpedDb);
-    }
-  } catch (err) {
-    console.log(err)
-  }
-}
+const daemonProcessName = 'automated-database-backup';
 
 interface Options {
   init: boolean;
@@ -122,35 +30,45 @@ function parseArgumentsIntoOptions(rawArgs): Options {
   }
 }
 
-async function initConfigurationFile() {
-  const configExampleSource = path.resolve(__dirname, '../../example.config.yaml');
-  await execaCommand(`mkdir ${configOSDirectory}`);
-  await execaCommand(`cp ${configExampleSource} ${configOSDirectory}/config.yaml`);
+function startAutomatedBackupOnDaemonProcess() {
+  pm2.connect(function (err) {
+    if (err) {
+      console.error(err);
+      process.exit(2);
+    }
+
+    pm2.start({
+      script: path.resolve(__dirname, 'commands/run-automated-backup.command.js'),
+      name: daemonProcessName
+    }, function (err) {
+      if (err) {
+        console.error(err)
+        return pm2.disconnect()
+      }
+
+      // exit from main script execution, leave the rest to process manager
+      process.exit(2);
+    });
+  })
 }
 
-async function runAutomatedBackup() {
-  const config = getConfig();
+function stopAutomatedBackupDaemonProcess() {
+  pm2.stop(daemonProcessName, function (err) {
+    if (err) {
+      console.log(err);
+    }
 
-  const scheduleOptions = {
-    scheduled: true,
-    timezone: config.cronOptionsTimeZone
-  };
-
-  const scheduledFunction = async () => {
-    await backupDb(config);
-  };
-
-  const task = cron.schedule(config.cronExpression, scheduledFunction, scheduleOptions);
-
-  task.start();
+    process.exit(0);
+  });
 }
 
 (async () => {
   const options = parseArgumentsIntoOptions(process.argv);
 
   switch (true) {
-    case options.init: await initConfigurationFile(); break;
-    case options.start: await runAutomatedBackup(); break;
+    case options.init: await initializeConfigurationFile(); break;
+    case options.start: startAutomatedBackupOnDaemonProcess(); break;
+    case options.stop: stopAutomatedBackupDaemonProcess(); break;
     default: break;
   }
 })();
