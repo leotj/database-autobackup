@@ -5,14 +5,14 @@
 [![APLv2][license-badge]][license]
 [![Build Status - GitHub Actions][gha-badge]][gha-ci]
 
-Backup your database automatically and upload the encrypted backup to an Object Storage like AWS S3.
+Backup your database automatically and upload the encrypted backup to an object storage service like AWS S3.
 
 This CLI uses [pm2] to schedule backups via the daemon process. You can use the pm2 command to control the daemon process.
 
-Current Support Database
+Supported Database:
 - MySQL
 
-Current Supported Object Storage
+Supported Object Storage:
 - AWS S3
 
 ## Available Commands
