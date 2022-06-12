@@ -47,7 +47,7 @@ function startAutomatedBackupOnDaemonProcess() {
       }
 
       // exit from main script execution, leave the rest to process manager
-      process.exit(2);
+      process.exit(0);
     });
   })
 }
@@ -56,6 +56,7 @@ function stopAutomatedBackupDaemonProcess() {
   pm2.stop(daemonProcessName, function (err) {
     if (err) {
       console.log(err);
+      process.exit(2);
     }
 
     process.exit(0);
